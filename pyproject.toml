@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools >= 77.0.3"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dbtmon"
+version = "0.0.1"
+authors = [
+    { name="John Small", email="johnsmall407@gmail.com" }
+]
+description = "A simple wrapper program for modifying dbt command output"
+readme = "README.md"
+requires-python = ">=3.10.11"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+license = "apache-2.0"
+license-files = ["LICEN[CS]E*"]
+
+[project.urls]
