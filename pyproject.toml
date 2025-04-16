@@ -19,3 +19,9 @@ license = "apache-2.0"
 license-files = ["LICEN[CS]E*"]
 
 [project.urls]
+"Homepage" = "https://github.com/Southern-Sun/dbtmon"
+"Bug Tracker" = "https://github.com/Southern-Sun/dbtmon/issues"
+
+[project.scripts]
+dbtmon = "dbtmon.__main__:cli"
+__dbtmonpipe__ = "dbtmon.__main__:pipe"
