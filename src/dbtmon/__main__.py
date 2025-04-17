@@ -24,11 +24,11 @@ parser.add_argument(
 )
 
 # Provide a list of CLI options to export
-OPTIONS = []
+OPTIONS: list[str] = []
 for action in parser._actions:
     OPTIONS.extend(action.option_strings)
 
-OPTIONS = [option.strip("-") for option in OPTIONS]
+OPTIONS = [option.lstrip("-") for option in OPTIONS]
 
 
 def pipe():
