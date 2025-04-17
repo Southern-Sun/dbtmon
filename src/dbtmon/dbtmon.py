@@ -4,6 +4,15 @@ import argparse
 from dataclasses import dataclass
 import os
 
+import asyncio
+import logging
+
+logger = logging.getLogger(__name__)
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
 
 # Define command line arguments
 parser = argparse.ArgumentParser(description="dbt monitor")
@@ -26,6 +35,13 @@ for action in parser._actions:
     OPTIONS.extend(action.option_strings)
 
 OPTIONS = [option.strip("-") for option in OPTIONS]
+
+COLOR_CONTROL_CHARS = [
+    "\033[0m", # Reset
+    "\033[31m", # Red
+    "\033[32m", # Green
+    "\033[33m", # Yellow
+]
 
 @dataclass
 class DBTThread:
@@ -83,11 +99,11 @@ class DBTMonitor:
 
     @property
     def running_threads(self) -> dict[str, DBTThread]:
-        return {k: v for k, v in self.threads.items() if v["status"] == "RUN"}
+        return {k: v for k, v in self.threads.items() if v.status == "RUN"}
     
     @property
     def completed_threads(self) -> dict[str, DBTThread]:
-        return {k: v for k, v in self.threads.items() if v["status"] != "RUN"}
+        return {k: v for k, v in self.threads.items() if v.status != "RUN"}
 
     def _print_threads(self):
         # Placeholder for thread printing logic
@@ -98,48 +114,54 @@ class DBTMonitor:
         if self.rewind > 0:
             # This moves the cursor up in the terminal:
             print(f"\033[{self.rewind}F")
-            # Then, print blank space since our messages are not necessarily the same length
-            for _ in range(self.rewind):
-                print(" " * terminal_width)
-            # Then move the cursor up again
-            print(f"\033[{self.rewind}F")
 
         # We want success/error messages to appear at the top and not get overwritten
         for thread in self.completed_threads.values():
-            print(thread)
+            formatted_thread = str(thread)
+            print(formatted_thread.ljust(terminal_width))
 
         # We need the running threads var twice so avoid recalculating it
         for thread in (running_threads := self.running_threads.values()):
-            print(thread)
+            formatted_thread = str(thread)
+            print(formatted_thread.ljust(terminal_width))
 
         self.rewind = len(running_threads) + 1
 
     def process_next_line(self, statement: str):
+        logger.debug(f"Processing line: {statement.strip()}")
+        if statement is None:
+            return
+        
         if not statement.startswith("\033[0m"):
             # This is a continuation of the previous line and never a job status message
             print(statement)
             return
+        
+        # Remove color control characters
+        for char in COLOR_CONTROL_CHARS:
+            statement = statement.replace(char, "")
         
         if all(status not in statement for status in ["[RUN", "[SUCCESS", "[ERROR", "[SKIP"]):
             # This is not a model status message so we pass it through
             print(statement)
             return
 
-        timestamp = statement[4:12]
-        full_message = statement[13:]
+        timestamp = statement[:8]
+        full_message = statement[9:]
         message, status = full_message.split("[", maxsplit=1)
 
         # 1 of 5 START sql view model project.model_name ..........
         # 1 of 5 OK created sql view model project.model_name .....
         progress, _, total, *rest = message.split()
+        progress, total = int(progress), int(total)
         text = " ".join(rest)
         
         match status.rstrip("]").split():
-            case "RUN":
+            case ["RUN"]:
                 self.threads[progress] = DBTThread(
                     timestamp=timestamp,
-                    progress=int(progress),
-                    total=int(total),
+                    progress=progress,
+                    total=total,
                     message=text,
                     status="RUN",
                     started_at=time.time(),
@@ -159,15 +181,17 @@ class DBTMonitor:
                 self.threads[progress].status = "SUCCESS"
                 self.threads[progress].runtime = float(runtime[:-1])
                 self.threads[progress].exit_code = int(code)
-            case "SKIP":
+            case ["SKIP"]:
                 self.threads[progress] = DBTThread(
                     timestamp=timestamp,
-                    progress=int(progress),
-                    total=int(total),
+                    progress=progress,
+                    total=total,
                     message=text,
                     status="SKIP",
                     started_at=None,
                 )
+            case _:
+                print(f"Unknown status: '{status}'")
 
         self._print_threads()
         if self.threads[progress].status == "RUN":
@@ -193,3 +217,42 @@ class DBTMonitor:
                 return
 
             self.process_next_line(statement)
+
+    async def run_async(self):
+        while True:
+            input_task = asyncio.create_task(asyncio.to_thread(input))
+            await asyncio.sleep(self.minimum_wait)
+            while not input_task.done():
+                await asyncio.sleep(self.polling_rate)
+                if not self.threads:
+                    continue
+                self._print_threads()
+
+            try:
+                statement = await input_task
+            except EOFError:
+                return
+
+            self.process_next_line(statement)
+
+    def run_file(self, filename: str):
+        with open(filename, "r") as file:
+            for line in file:
+                self.process_next_line(line.strip())
+
+                if not self.threads:
+                    continue
+                for _ in range(5):
+                    time.sleep(self.polling_rate)
+                    self._print_threads()
+
+
+if __name__ == "__main__":
+    args = parser.parse_args()
+    logger.debug(f"Running with arguments: {args}")
+    monitor = DBTMonitor(polling_rate=args.polling_rate, minimum_wait=args.minimum_wait)
+    try:
+        # asyncio.run(monitor.run_async())
+        monitor.run_file("tests/test_output.txt")
+    except KeyboardInterrupt:
+        print("\nProcess terminated by user.")
