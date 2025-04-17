@@ -90,7 +90,12 @@ class DBTThread:
 
 
 class DBTMonitor:
-    def __init__(self, polling_rate: float = 0.2, minimum_wait: float = 0.025, callback: Callable = None):
+    def __init__(
+        self,
+        polling_rate: float = 0.2,
+        minimum_wait: float = 0.025,
+        callback: Callable = None,
+    ):
         self.polling_rate = polling_rate
         self.minimum_wait = minimum_wait
         self.callback = callback
