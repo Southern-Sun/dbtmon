@@ -109,10 +109,6 @@ class DBTMonitor:
         return {k: v for k, v in self.threads.items() if v.status != "RUN"}
 
     def _print_threads(self):
-        # Placeholder for thread printing logic
-        # Based on thread count (rewind), print blank lines via os.get_terminal_size()
-        # Then print the completed threads (if any)
-        # Then print the running threads (if any)
         terminal_width = os.get_terminal_size().columns
         if self.rewind > 0:
             # This moves the cursor up in the terminal:
