@@ -36,11 +36,12 @@ for action in parser._actions:
 OPTIONS = [option.strip("-") for option in OPTIONS]
 
 COLOR_CONTROL_CHARS = [
-    "\033[0m", # Reset
-    "\033[31m", # Red
-    "\033[32m", # Green
-    "\033[33m", # Yellow
+    "\033[0m",  # Reset
+    "\033[31m",  # Red
+    "\033[32m",  # Green
+    "\033[33m",  # Yellow
 ]
+
 
 @dataclass
 class DBTThread:
@@ -59,7 +60,7 @@ class DBTThread:
         formatted_time = time.strftime("%H:%M:%S", time.gmtime(elapsed_time))
         hundredths = int(elapsed_time % 1 * 100)
         return f"{formatted_time}.{hundredths:02}"
-    
+
     def get_status(self) -> str:
         """Get the formatted status of the thread"""
         match self.status:
@@ -82,7 +83,10 @@ class DBTThread:
             case "SKIP":
                 return stem + f" [{self.get_status()}]"
             case _:
-                return stem + f" [{self.get_status()} {self.exit_code}] in {self.get_runtime()}"
+                return (
+                    stem
+                    + f" [{self.get_status()} {self.exit_code}] in {self.get_runtime()}"
+                )
 
 
 class DBTMonitor:
@@ -99,7 +103,7 @@ class DBTMonitor:
     @property
     def running_threads(self) -> dict[str, DBTThread]:
         return {k: v for k, v in self.threads.items() if v.status == "RUN"}
-    
+
     @property
     def completed_threads(self) -> dict[str, DBTThread]:
         return {k: v for k, v in self.threads.items() if v.status != "RUN"}
@@ -130,17 +134,20 @@ class DBTMonitor:
         logger.debug(f"Processing line: {statement.strip()}")
         if statement is None:
             return
-        
+
         if not statement.startswith("\033[0m"):
             # This is a continuation of the previous line and never a job status message
             print(statement)
             return
-        
+
         # Remove color control characters
         for char in COLOR_CONTROL_CHARS:
             statement = statement.replace(char, "")
-        
-        if all(status not in statement for status in ["[RUN", "[SUCCESS", "[ERROR", "[SKIP"]):
+
+        if all(
+            status not in statement
+            for status in ["[RUN", "[SUCCESS", "[ERROR", "[SKIP"]
+        ):
             # This is not a model status message so we pass it through
             print(statement)
             return
@@ -154,7 +161,7 @@ class DBTMonitor:
         progress, _, total, *rest = message.split()
         progress, total = int(progress), int(total)
         text = " ".join(rest)
-        
+
         match status.rstrip("]").split():
             case ["RUN"]:
                 self.threads[progress] = DBTThread(
@@ -195,7 +202,7 @@ class DBTMonitor:
         self._print_threads()
         if self.threads[progress].status == "RUN":
             return
-        
+
         # Prune completed threads
         del self.threads[progress]
 
