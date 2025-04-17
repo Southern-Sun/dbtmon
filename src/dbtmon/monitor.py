@@ -1,39 +1,9 @@
-import time
-import argparse
-from dataclasses import dataclass
-import os
-from typing import Callable
 import asyncio
-import logging
+import os
+import time
+from dataclasses import dataclass
+from typing import Callable
 
-logger = logging.getLogger(__name__)
-# Set up logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
-
-# Define command line arguments
-parser = argparse.ArgumentParser(description="dbt monitor")
-parser.add_argument(
-    "--polling-rate",
-    type=float,
-    default=0.2,
-    help="Polling rate for checking stdin (default: 0.2)",
-)
-parser.add_argument(
-    "--minimum-wait",
-    type=float,
-    default=0.025,
-    help="Minimum wait time before checking stdin (default: 0.025)",
-)
-
-# Provide a list of CLI options to export
-OPTIONS = []
-for action in parser._actions:
-    OPTIONS.extend(action.option_strings)
-
-OPTIONS = [option.strip("-") for option in OPTIONS]
 
 COLOR_CONTROL_CHARS = [
     "\033[0m",  # Reset
@@ -133,7 +103,6 @@ class DBTMonitor:
         self.rewind = len(running_threads) + 1
 
     def process_next_line(self, statement: str):
-        logger.debug(f"Processing line: {statement.strip()}")
         if statement is None:
             return
 
@@ -242,9 +211,7 @@ class DBTMonitor:
 
 
 if __name__ == "__main__":
-    args = parser.parse_args()
-    logger.debug(f"Running with arguments: {args}")
-    monitor = DBTMonitor(polling_rate=args.polling_rate, minimum_wait=args.minimum_wait)
+    monitor = DBTMonitor()
     try:
         # asyncio.run(monitor.run_async())
         monitor.run_file("tests/test_output.txt")
