@@ -1,4 +1,3 @@
-import threading
 import time
 import argparse
 from dataclasses import dataclass
@@ -200,25 +199,7 @@ class DBTMonitor:
         # Prune completed threads
         del self.threads[progress]
 
-    def run(self):
-        while True:
-            input_task = threading.Thread(target=input)
-            input_task.start()
-            time.sleep(self.minimum_wait)
-            while input_task.is_alive():
-                time.sleep(self.polling_rate)
-                if not self.threads:
-                    continue
-                self._print_threads()
-
-            try:
-                statement = input_task.join()
-            except EOFError:
-                return
-
-            self.process_next_line(statement)
-
-    async def run_async(self):
+    async def run(self):
         while True:
             input_task = asyncio.create_task(asyncio.to_thread(input))
             await asyncio.sleep(self.minimum_wait)
