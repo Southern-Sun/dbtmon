@@ -2,7 +2,7 @@ import time
 import argparse
 from dataclasses import dataclass
 import os
-
+from typing import Callable
 import asyncio
 import logging
 
@@ -90,9 +90,10 @@ class DBTThread:
 
 
 class DBTMonitor:
-    def __init__(self, polling_rate: float = 0.2, minimum_wait: float = 0.025):
+    def __init__(self, polling_rate: float = 0.2, minimum_wait: float = 0.025, callback: Callable = None):
         self.polling_rate = polling_rate
         self.minimum_wait = minimum_wait
+        self.callback = callback
         self._threads = {}
         self.rewind = 0
 
@@ -215,9 +216,13 @@ class DBTMonitor:
             try:
                 statement = await input_task
             except EOFError:
-                return
+                break
 
             self.process_next_line(statement)
+
+        if self.callback is None:
+            return
+        self.callback()
 
     def run_file(self, filename: str):
         with open(filename, "r") as file:
