@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 import yaml
 
-from dbtmon.dbtmon import main, options
+from dbtmon.dbtmon_beta import main, options
 
 pipe = main
 
