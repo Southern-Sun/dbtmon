@@ -1,6 +1,5 @@
 import threading
 import time
-import re
 import argparse
 from dataclasses import dataclass
 import os
