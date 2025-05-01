@@ -35,7 +35,7 @@ def pipe():
     args = parser.parse_args()
     monitor = DBTMonitor(polling_rate=args.polling_rate, minimum_wait=args.minimum_wait)
     try:
-        asyncio.run(monitor.run_async())
+        asyncio.run(monitor.run())
     except KeyboardInterrupt:
         print("\nProcess terminated by user.")
         sys.exit(0)
