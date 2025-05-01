@@ -6,10 +6,10 @@ from typing import Callable
 
 
 COLOR_CONTROL_CHARS = [
-    "\033[0m",  # Reset
-    "\033[31m",  # Red
-    "\033[32m",  # Green
-    "\033[33m",  # Yellow
+    "\033[0m", # Reset
+    "\033[31m", # Red
+    "\033[32m", # Green
+    "\033[33m", # Yellow
 ]
 
 
