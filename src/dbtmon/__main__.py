@@ -47,12 +47,12 @@ def cli():
         subprocess.run(["__dbtmonpipe__"] + sys.argv[1:])
         return
 
+    dbtmon_args = []
     dbtmon_config = Path.home() / ".dbt" / "dbtmon.yml"
     if dbtmon_config.exists():
         with open(dbtmon_config, "r") as f:
             config: dict = yaml.safe_load(f)
 
-        dbtmon_args = []
         for key, value in config.items():
             if key not in OPTIONS:
                 print(
