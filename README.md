@@ -14,7 +14,7 @@ into your workflow: just replace `dbt` with `dbtmon`.
 - Keeps running jobs at the bottom of the terminal output
 - Displays elapsed runtime and completed runtime in HH:MM:SS form
 
-### dbt run
+### dbt run:
 ![Screenshot of the output of dbt run. Markup points out the inability to clearly see which models
 are running and for how long they have been running.](/assets/dbt_screenshot.png)
 
