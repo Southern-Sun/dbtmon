@@ -15,12 +15,12 @@ into your workflow: just replace `dbt` with `dbtmon`.
 - Displays elapsed runtime and completed runtime in HH:MM:SS form
 
 ### dbt run
-![Screenshot of the output of `dbt run`. Markup points out the inability to clearly see which models
+![Screenshot of the output of dbt run. Markup points out the inability to clearly see which models
 are running and for how long they have been running.](/assets/dbt_screenshot.png)
 
 ### dbtmon run:
 
-![Screenshot of the output of `dbtmon run`. Markup points out the running jobs grouped and displayed
+![Screenshot of the output of dbtmon run. Markup points out the running jobs grouped and displayed
 in the terminal and the elapsed runtime clocks.](/assets/dbtmon_screenshot.png)
 
 
