@@ -23,13 +23,36 @@ class DBTThread:
     started_at: float
     runtime: float = None
     exit_code: int = 0
+    min_concurrent_threads: int = 999
+    max_concurrent_threads: int = 0
+    blocking_started_at: float = None
 
-    def get_runtime(self) -> float:
+    @staticmethod
+    def get_timestamp(value: float, format: str = "%H:%M:%S", display_ms: bool = True) -> str:
+        """Takes a length of time and converts it to a timestamp, optionally with milliseconds"""
+        formatted_time = time.strftime(format, time.gmtime(value))
+        if not display_ms:
+            return formatted_time
+
+        hundredths = int(value % 1 * 100)
+        return f"{formatted_time}.{hundredths:02}"
+
+    def get_runtime(self) -> str:
         """Calculate and format the thread runtime"""
         elapsed_time = self.runtime or (time.time() - self.started_at)
-        formatted_time = time.strftime("%H:%M:%S", time.gmtime(elapsed_time))
-        hundredths = int(elapsed_time % 1 * 100)
-        return f"{formatted_time}.{hundredths:02}"
+        return self.get_timestamp(elapsed_time)
+
+    def get_raw_blocking_time(self) -> float:
+        """Get the amount of runtime for which the model was running alone"""
+        try:
+            return self.runtime - (self.blocking_started_at - self.started_at)
+        except TypeError:
+            # One of the values was not set -- the model could not have been blocking
+            return 0.0
+    
+    def get_blocking_time(self) -> str:
+        """Calculate and format the model blocking time"""
+        return self.get_timestamp(self.get_raw_blocking_time())
 
     def get_status(self) -> str:
         """Get the formatted status of the thread"""
@@ -70,6 +93,7 @@ class DBTMonitor:
         self.minimum_wait = minimum_wait
         self.callback = callback
         self._threads = {}
+        self.completed: list[DBTThread] = []
         self.rewind = 0
 
     @property
@@ -96,11 +120,20 @@ class DBTMonitor:
             print(formatted_thread.ljust(terminal_width))
 
         # We need the running threads var twice so avoid recalculating it
-        for thread in (running_threads := self.running_threads.values()):
+        running_threads = self.running_threads.values()
+        thread_count = len(running_threads)
+        for thread in running_threads:
             formatted_thread = str(thread)
             print(formatted_thread.ljust(terminal_width))
 
-        self.rewind = len(running_threads) + 1
+            # Logging to detect blocking models
+            if thread_count < thread.min_concurrent_threads:
+                # Track when the thread gets to its lowest concurrent thread count
+                thread.blocking_started_at = time.time()
+            thread.min_concurrent_threads = min(thread.min_concurrent_threads, thread_count)
+            thread.max_concurrent_threads = max(thread.max_concurrent_threads, thread_count)
+
+        self.rewind = thread_count + 1
 
     def process_next_line(self, statement: str):
         if statement is None:
@@ -174,7 +207,8 @@ class DBTMonitor:
         if self.threads[progress].status == "RUN":
             return
 
-        # Prune completed threads
+        # Archive completed threads
+        self.completed.append(self.threads[progress])
         del self.threads[progress]
 
     async def run(self):
@@ -193,6 +227,29 @@ class DBTMonitor:
                 break
 
             self.process_next_line(statement)
+
+        # Post-dbt work
+        # TODO: consider moving this all to individual methods
+        # Log information about the completed threads
+        # Calculate Critical Path
+        # Identify blocking models
+        for thread in self.completed:
+            if thread.min_concurrent_threads != 1:
+                continue
+
+            # TODO: change comparison to look at CLI arg
+            if thread.get_raw_blocking_time() < 60:
+                continue
+
+            # TODO: update to use thread.model_name
+            *_, model_name = thread.message.strip(".").split()
+            print(
+                "[dbtmon]",
+                "Blocking Model:",
+                f"name={model_name}",
+                f"build_time={thread.get_runtime()}",
+                f"blocking_time={thread.get_blocking_time()}"
+            )
 
         if self.callback is None:
             return
