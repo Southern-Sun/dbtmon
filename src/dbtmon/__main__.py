@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import subprocess
 import sys
+from typing import Collection
 import yaml
 from pathlib import Path
 
@@ -62,7 +63,12 @@ def cli():
                 continue
 
             dbtmon_args.append(f"--{key}")
-            if value is not None:
+            if value is None:
+                continue
+            
+            if isinstance(value, Collection):
+                dbtmon_args.extend(value)
+            else:
                 dbtmon_args.append(value)
 
     try:
