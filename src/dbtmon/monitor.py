@@ -1,9 +1,15 @@
 import asyncio
+import json
 import os
 import time
 from dataclasses import dataclass
-from typing import Callable
+from typing import Any, Callable
+from pathlib import Path
 
+import networkx as nx
+
+from dbtmon.config import DBTMonConfig
+from dbtmon import __manifest_version__, __version__
 
 COLOR_CONTROL_CHARS = [
     "\033[0m", # Reset
@@ -26,6 +32,11 @@ class DBTThread:
     min_concurrent_threads: int = 999
     max_concurrent_threads: int = 0
     blocking_started_at: float = None
+
+    @property
+    def model_name(self) -> str:
+        *_, model_name = self.message.strip(".").split()
+        return model_name
 
     @staticmethod
     def get_timestamp(value: float, format: str = "%H:%M:%S", display_ms: bool = True) -> str:
@@ -80,17 +91,23 @@ class DBTThread:
                     stem
                     + f" [{self.get_status()} {self.exit_code}] in {self.get_runtime()}"
                 )
+            
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "model_name": self.model_name,
+            "message": self.message,
+            "status": self.status,
+            "runtime": self.runtime,
+            "exit_code": self.exit_code,
+            "min_concurrent_threads": self.min_concurrent_threads,
+            "max_concurrent_threads": self.max_concurrent_threads,
+            "blocking_time": self.get_raw_blocking_time()
+        }
 
 
 class DBTMonitor:
-    def __init__(
-        self,
-        polling_rate: float = 0.2,
-        minimum_wait: float = 0.025,
-        callback: Callable = None,
-    ):
-        self.polling_rate = polling_rate
-        self.minimum_wait = minimum_wait
+    def __init__(self, callback: Callable = None, **kwargs):
+        self.config = DBTMonConfig(**kwargs)
         self.callback = callback
         self._threads = {}
         self.completed: list[DBTThread] = []
@@ -211,12 +228,136 @@ class DBTMonitor:
         self.completed.append(self.threads[progress])
         del self.threads[progress]
 
+    def get_project_dir(self) -> Path:
+        # Check command line args first
+        possible_directories: list[Path] = []
+        if self.config.dbtmon_project_dir is not None:
+            possible_directories.append(Path(self.config.dbtmon_project_dir))
+
+        # Check environment variables
+        if "DBT_PROJECT_DIR" in os.environ:
+            possible_directories.append(Path(os.environ.get("DBT_PROJECT_DIR")))
+
+        # Find the directory otherwise
+        cwd = Path.cwd()
+        possible_directories.extend([cwd, *cwd.parents])
+        
+        for directory in possible_directories:
+            if (directory / "dbt_project.yml").is_file():
+                return directory
+
+        # Report failure to find. First directory in the list should be the best
+        raise FileNotFoundError(f"Unable to find dbt_project.yml at {possible_directories[0]}")
+    
+    def print_blocking_threads(self) -> None:
+        if len(self.completed) < self.config.blocking_minimum_job_size:
+            return
+        
+        for thread in self.completed:
+            if thread.min_concurrent_threads != 1:
+                continue
+
+            if thread.get_raw_blocking_time() < self.config.minimum_blocking_time:
+                continue
+
+            print(
+                "[dbtmon]",
+                "Blocking Model:",
+                f"name={thread.model_name}",
+                f"build_time={thread.get_runtime()}",
+                f"blocking_time={thread.get_blocking_time()}"
+            )
+
+    def build_manifest(self) -> None:
+        """
+        Builds or updates the dbtmon_manifest.json file. File is placed in the target/ directory
+        by default but this can be overridden in the settings.
+
+        The manifest is a JSON file like the following python dict:
+        {
+            "version": __version__,
+            "last_run": ["model_alias_1", "model_alias_2", ...],
+            "nodes": {"model_alias_1": {"DBTThread.to_dict()"}, ...}
+        }
+        """
+        try:
+            project_dir = self.get_project_dir()
+        except FileNotFoundError as e:
+            print(e)
+            return
+
+        # Custom manifest location?
+        manifest_path = Path(self.config.dbtmon_manifest_path)
+        if Path(".") in manifest_path.parents:
+            # This is a relative path
+            manifest_path = project_dir / manifest_path
+
+        if not manifest_path.parent.is_dir():
+            print("Error: Invalid manifest location!")
+            return
+
+        manifest = {
+            "version": __manifest_version__,
+            "last_run": [],
+            "nodes": {}
+        }
+        if manifest_path.is_file():
+            with open(manifest_path, "r", encoding="utf-8") as f:
+                existing_manifest = json.load(f)
+
+            if existing_manifest["version"] == __manifest_version__:
+                # Existing manifest is up to date, keep its data
+                manifest["nodes"].update(existing_manifest["nodes"])
+
+        manifest["nodes"].update(
+            {thread.model_name: thread.to_dict() for thread in self.completed}
+        )
+        manifest["last_run"] = [thread.model_name for thread in self.completed]
+
+        with open(manifest_path, "w", encoding="utf-8") as f:
+            json.dump(manifest, f)
+
+        return manifest
+    
+    def get_dbt_dag(self, dbtmon_manifest: dict = None) -> nx.DiGraph:
+        dbtmon_manifest = dbtmon_manifest or {}
+        try:
+            project_dir = self.get_project_dir()
+        except FileNotFoundError as e:
+            print(e)
+            return
+        
+        dbt_manifest_path = project_dir / "target" / "manifest.json"
+
+        if not dbt_manifest_path.is_file():
+            print(f"Error: Unable to find dbt manifest at {dbt_manifest_path}")
+            return
+        
+        with open(dbt_manifest_path, "r") as f:
+            dbt_manifest: dict[str, dict[str, dict]] = json.load(f)
+
+        all_nodes = {**dbt_manifest["nodes"], **dbt_manifest.get("sources", {})}
+
+        dag = nx.DiGraph()
+        for node_name, node_data in all_nodes.items():
+            dag.add_node(node_name, **node_data)
+
+            # Find the entry in dbtmon_manifest for edge weighting
+            # dbtmon stores this by name, not the fully qualified name
+            # int__my_model vs my_project.model.int__my_model
+            dbtmon_data = dbtmon_manifest.get(node_data.get("name"), {})
+
+            for dependency in node_data.get("depends_on", {}).get("nodes", []):
+                dag.add_edge(dependency, node_name, **dbtmon_data)
+
+        return dag
+
     async def run(self):
         while True:
             input_task = asyncio.create_task(asyncio.to_thread(input))
-            await asyncio.sleep(self.minimum_wait)
+            await asyncio.sleep(self.config.minimum_wait)
             while not input_task.done():
-                await asyncio.sleep(self.polling_rate)
+                await asyncio.sleep(self.config.polling_rate)
                 if not self.threads:
                     continue
                 self._print_threads()
@@ -229,27 +370,25 @@ class DBTMonitor:
             self.process_next_line(statement)
 
         # Post-dbt work
-        # TODO: consider moving this all to individual methods
-        # Log information about the completed threads
-        # Calculate Critical Path
         # Identify blocking models
-        for thread in self.completed:
-            if thread.min_concurrent_threads != 1:
-                continue
+        if not self.config.disable_blocking_thread_detection:
+            self.print_blocking_threads()
 
-            # TODO: change comparison to look at CLI arg
-            if thread.get_raw_blocking_time() < 60:
-                continue
+        # Create or update dbtmon_manifest.json
+        if not self.config.disable_dbtmon_manifest:
+            manifest = self.build_manifest()
 
-            # TODO: update to use thread.model_name
-            *_, model_name = thread.message.strip(".").split()
-            print(
-                "[dbtmon]",
-                "Blocking Model:",
-                f"name={model_name}",
-                f"build_time={thread.get_runtime()}",
-                f"blocking_time={thread.get_blocking_time()}"
-            )
+            # Calculate Critical Path
+            dag = self.get_dbt_dag(dbtmon_manifest=manifest)
+            critical_path = nx.dag_longest_path(dag, weight="runtime", default_weight=0)
+            for node in critical_path:
+                *_, model_name = node.split(".", maxsplit=2)
+                runtime = manifest.get(model_name, {}).get("runtime")
+                if runtime is None:
+                    timestamp = "N/A"
+                else:
+                    timestamp = DBTThread.get_timestamp(runtime)
+                print(f"{node}: {timestamp}")
 
         if self.callback is None:
             return
@@ -263,7 +402,7 @@ class DBTMonitor:
                 if not self.threads:
                     continue
                 for _ in range(5):
-                    time.sleep(self.polling_rate)
+                    time.sleep(self.config.polling_rate)
                     self._print_threads()
 
 
