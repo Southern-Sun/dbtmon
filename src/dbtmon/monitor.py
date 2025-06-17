@@ -381,11 +381,12 @@ class DBTMonitor:
             manifest = self.build_manifest()
 
             # Calculate Critical Path
+            print("[dbtmon] Critical Path:")
             dag = self.get_dbt_dag(dbtmon_manifest=manifest)
             critical_path = nx.dag_longest_path(dag, weight="runtime", default_weight=0)
             for node in critical_path:
                 *_, model_name = node.split(".", maxsplit=2)
-                runtime = manifest.get(model_name, {}).get("runtime")
+                runtime = manifest["nodes"].get(model_name, {}).get("runtime")
                 if runtime is None:
                     timestamp = "N/A"
                 else:
