@@ -102,7 +102,7 @@ class DBTThread:
             "exit_code": self.exit_code,
             "min_concurrent_threads": self.min_concurrent_threads,
             "max_concurrent_threads": self.max_concurrent_threads,
-            "blocking_time": self.get_raw_blocking_time()
+            "blocking_time": self.get_raw_blocking_time() if self.min_concurrent_threads == 1 else 0.0
         }
 
 
@@ -347,6 +347,8 @@ class DBTMonitor:
             # dbtmon stores this by name, not the fully qualified name
             # int__my_model vs my_project.model.int__my_model
             dbtmon_data = dbtmon_manifest.get(node_data.get("name"), {})
+            if dbtmon_data:
+                print(f"Found {node_name} in manifest!")
 
             for dependency in node_data.get("depends_on", {}).get("nodes", []):
                 dag.add_edge(dependency, node_name, **dbtmon_data)
