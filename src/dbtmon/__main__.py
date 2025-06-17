@@ -48,11 +48,21 @@ def cli():
         subprocess.run(["__dbtmonpipe__"] + sys.argv[1:])
         return
 
+    # TODO: Improve this flow so that CLI args can be passed from outside the config file
+
     dbtmon_args = []
+    # Handle custom project directory settings
+    try:
+        directory_index = sys.argv.index("--project-dir")
+        dbtmon_args = ["--dbtmon_project_dir", sys.argv[directory_index+1]]
+    except ValueError:
+        # project-dir is not specified in the args
+        pass
+
     dbtmon_config = Path.home() / ".dbt" / "dbtmon.yml"
     if dbtmon_config.exists():
         with open(dbtmon_config, "r") as f:
-            config: dict = yaml.safe_load(f)
+            config: dict = yaml.safe_load(f) or {}
 
         for key, value in config.items():
             if key not in OPTIONS:
@@ -65,7 +75,7 @@ def cli():
             dbtmon_args.append(f"--{key}")
             if value is None:
                 continue
-            
+
             if isinstance(value, Collection):
                 dbtmon_args.extend(value)
             else:
