@@ -35,7 +35,8 @@ class DBTThread:
 
     @property
     def model_name(self) -> str:
-        *_, model_name = self.message.strip(".").split()
+        *_, schema_model_name = self.message.strip(".").split()
+        _, model_name = schema_model_name.split(".")
         return model_name
 
     @staticmethod
