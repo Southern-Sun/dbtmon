@@ -320,7 +320,7 @@ class DBTMonitor:
 
         return manifest
     
-    def get_dbt_dag(self, dbtmon_manifest: dict = None) -> nx.DiGraph:
+    def get_dbt_dag(self, dbtmon_manifest: dict[str, dict] = None) -> nx.DiGraph:
         dbtmon_manifest = dbtmon_manifest or {}
         try:
             project_dir = self.get_project_dir()
@@ -347,8 +347,7 @@ class DBTMonitor:
             # dbtmon stores this by name, not the fully qualified name
             # int__my_model vs my_project.model.int__my_model
             search_name = node_data.get("name")
-            dbtmon_data = dbtmon_manifest.get(search_name, {})
-            print(f"{node_name=}, {search_name=}, found={bool(dbtmon_data)}")
+            dbtmon_data = dbtmon_manifest["nodes"].get(search_name, {})
 
             for dependency in node_data.get("depends_on", {}).get("nodes", []):
                 dag.add_edge(dependency, node_name, **dbtmon_data)
