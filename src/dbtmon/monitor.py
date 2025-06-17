@@ -346,9 +346,9 @@ class DBTMonitor:
             # Find the entry in dbtmon_manifest for edge weighting
             # dbtmon stores this by name, not the fully qualified name
             # int__my_model vs my_project.model.int__my_model
-            dbtmon_data = dbtmon_manifest.get(node_data.get("name"), {})
-            if dbtmon_data:
-                print(f"Found {node_name} in manifest!")
+            search_name = node_data.get("name")
+            dbtmon_data = dbtmon_manifest.get(search_name, {})
+            print(f"{node_name=}, {search_name=}, found={bool(dbtmon_data)}")
 
             for dependency in node_data.get("depends_on", {}).get("nodes", []):
                 dag.add_edge(dependency, node_name, **dbtmon_data)
