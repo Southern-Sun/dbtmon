@@ -23,6 +23,44 @@ parser.add_argument(
     default=0.025,
     help="Minimum wait time before checking stdin (default: 0.025)",
 )
+parser.add_argument(
+    "--dbtmon-project-dir",
+    type=str,
+    default=None,
+    help="Path to the dbtmon project directory (default: None)",
+)
+
+# Blocking Thread Detection
+parser.add_argument(
+    "--disable-blocking-thread-detection",
+    action="store_true",
+    help="Disable blocking thread detection (default: False)",
+)
+parser.add_argument(
+    "--minimum-blocking-time",
+    type=float,
+    default=60.0,
+    help="Minimum time (in seconds) for a thread to be considered blocking (default: 60.0)",
+)
+parser.add_argument(
+    "--blocking-minimum-job-size",
+    type=int,
+    default=0,
+    help="Minimum number of jobs in flight to trigger blocking detection (default: 0)",
+)
+
+# dbtmon Manifest Controls
+parser.add_argument(
+    "--disable-dbtmon-manifest",
+    action="store_true",
+    help="Disable generation and usage of the dbtmon manifest (default: False)",
+)
+parser.add_argument(
+    "--dbtmon-manifest-path",
+    type=str,
+    default="target/dbtmon_manifest.json",
+    help="Path to the dbtmon manifest file (default: target/dbtmon_manifest.json)",
+)
 
 # Provide a list of CLI options to export
 OPTIONS: list[str] = []
