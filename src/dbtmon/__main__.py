@@ -124,6 +124,8 @@ def cli():
             else:
                 dbtmon_args.append(value)
 
+            dbtmon_args = [str(arg) for arg in dbtmon_args]
+
     try:
         # Run `dbt` with user args, pipe stdout into __dbtmonpipe__
         dbt = subprocess.Popen(
