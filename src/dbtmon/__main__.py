@@ -7,10 +7,15 @@ import yaml
 from pathlib import Path
 
 from dbtmon.monitor import DBTMonitor
-
+from dbtmon import __version__
 
 # Define command line arguments
 parser = argparse.ArgumentParser(description="dbt monitor")
+parser.add_argument(
+    "--version",
+    action="version",
+    version=__version__
+)
 parser.add_argument(
     "--polling-rate",
     type=float,
