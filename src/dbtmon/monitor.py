@@ -27,7 +27,7 @@ class DBTThread:
     message: str
     status: str
     started_at: float
-    runtime: float = None
+    runtime: float = 0.0
     exit_code: int = 0
     min_concurrent_threads: int = 999
     max_concurrent_threads: int = 0
