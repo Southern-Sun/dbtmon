@@ -2,14 +2,20 @@ import argparse
 import asyncio
 import subprocess
 import sys
+from typing import Collection
 import yaml
 from pathlib import Path
 
 from dbtmon.monitor import DBTMonitor
-
+from dbtmon import __version__
 
 # Define command line arguments
 parser = argparse.ArgumentParser(description="dbt monitor")
+parser.add_argument(
+    "--version",
+    action="version",
+    version=__version__
+)
 parser.add_argument(
     "--polling-rate",
     type=float,
@@ -21,6 +27,44 @@ parser.add_argument(
     type=float,
     default=0.025,
     help="Minimum wait time before checking stdin (default: 0.025)",
+)
+parser.add_argument(
+    "--dbtmon-project-dir",
+    type=str,
+    default=None,
+    help="Path to the dbtmon project directory (default: None)",
+)
+
+# Blocking Thread Detection
+parser.add_argument(
+    "--disable-blocking-thread-detection",
+    action="store_true",
+    help="Disable blocking thread detection (default: False)",
+)
+parser.add_argument(
+    "--minimum-blocking-time",
+    type=float,
+    default=60.0,
+    help="Minimum time (in seconds) for a thread to be considered blocking (default: 60.0)",
+)
+parser.add_argument(
+    "--blocking-minimum-job-size",
+    type=int,
+    default=0,
+    help="Minimum number of jobs in flight to trigger blocking detection (default: 0)",
+)
+
+# dbtmon Manifest Controls
+parser.add_argument(
+    "--disable-dbtmon-manifest",
+    action="store_true",
+    help="Disable generation and usage of the dbtmon manifest (default: False)",
+)
+parser.add_argument(
+    "--dbtmon-manifest-path",
+    type=str,
+    default="target/dbtmon_manifest.json",
+    help="Path to the dbtmon manifest file (default: target/dbtmon_manifest.json)",
 )
 
 # Provide a list of CLI options to export
@@ -47,11 +91,21 @@ def cli():
         subprocess.run(["__dbtmonpipe__"] + sys.argv[1:])
         return
 
+    # TODO: Improve this flow so that CLI args can be passed from outside the config file
+
     dbtmon_args = []
+    # Handle custom project directory settings
+    try:
+        directory_index = sys.argv.index("--project-dir")
+        dbtmon_args = ["--dbtmon_project_dir", sys.argv[directory_index+1]]
+    except ValueError:
+        # project-dir is not specified in the args
+        pass
+
     dbtmon_config = Path.home() / ".dbt" / "dbtmon.yml"
     if dbtmon_config.exists():
         with open(dbtmon_config, "r") as f:
-            config: dict = yaml.safe_load(f)
+            config: dict = yaml.safe_load(f) or {}
 
         for key, value in config.items():
             if key not in OPTIONS:
@@ -62,8 +116,15 @@ def cli():
                 continue
 
             dbtmon_args.append(f"--{key}")
-            if value is not None:
+            if value is None:
+                continue
+
+            if isinstance(value, Collection):
+                dbtmon_args.extend(value)
+            else:
                 dbtmon_args.append(value)
+
+            dbtmon_args = [str(arg) for arg in dbtmon_args]
 
     try:
         # Run `dbt` with user args, pipe stdout into __dbtmonpipe__
